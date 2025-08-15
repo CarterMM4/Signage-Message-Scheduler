@@ -1,1 +1,5 @@
-
+export class Exporter{
+  exportCSV(project){ if(!project) return; const headers=['Sign Type','Room Number','Room Name','Building','Level','Notes']; const rows=project.schedule.map(r=>[r.SignType,r.RoomNumber,r.RoomName,r.Building,r.Level,r.Notes]); const csv=[headers,...rows].map(a=>a.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n'); this._download(`${project.name||'schedule'}.csv`, 'text/csv', csv); }
+  exportXLSX(project){ if(!project) return; const ws_data=[['Sign Type','Room Number','Room Name','Building','Level','Notes'], ...project.schedule.map(r=>[r.SignType,r.RoomNumber,r.RoomName,r.Building,r.Level,r.Notes])]; const wb=XLSX.utils.book_new(); const ws=XLSX.utils.aoa_to_sheet(ws_data); XLSX.utils.book_append_sheet(wb, ws, 'Schedule'); const out=XLSX.write(wb,{bookType:'xlsx',type:'array'}); const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=(project.name||'schedule')+'.xlsx'; a.click(); URL.revokeObjectURL(url); }
+  _download(name,type,text){ const blob=new Blob([text],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
+}

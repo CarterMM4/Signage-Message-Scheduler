@@ -162,9 +162,12 @@
     </div>
   </div>
 
-  <!-- Minimal deps (loaded from CDN for convenience). For offline use, download and place locally. -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.mjs" type="module"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.mjs" type="module"></script>
+  <!-- Minimal deps (CDN). These work on GitHub Pages. If you ever want fully offline, we can vendor them locally. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.js"></script>
+  <script>
+    // Point pdf.js at its worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.js";
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
@@ -393,8 +396,14 @@
   }
 
   function generateScheduleFromOCR(){
-    const p=getProject(); if(!p) return;
+    const p=getProject(); if(!p){ alert('No project selected.'); return; }
+    if(!p.pages.length){ alert('No pages uploaded yet. Click "Upload Plan(s)".'); return; }
     const text = ocrIndex[pageKey()]||'';
+    if(!text.trim()){
+      alert('No OCR text found for this page. Click "Scan Text (OCR)" first, then try Generate.');
+      return;
+    }
+    const startCount = p.schedule.length;
     const rows=[];
 
     function pushRow(SignType, RoomNumber, RoomName, Notes=''){
@@ -454,6 +463,13 @@
     [...p.schedule, ...rows].forEach(r=>{ map.set(key(r), r) });
     p.schedule = [...map.values()];
     save(); renderSchedule();
+
+    const added = p.schedule.length - startCount;
+    if(added<=0){
+      alert('No keyword matches found on this page. Try running OCR again or zooming into a room and uploading a clearer page. You can still add rows manually.');
+    } else {
+      alert(`Added ${added} row(s) from OCR.`);
+    }
   }
 
   byId('btnGenerate').onclick = ()=>{

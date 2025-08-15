@@ -1,559 +1,121 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Southwood — Signage Schedule Generator</title>
-  <style>
-    :root{
-      --bg:#0b1020;--panel:#101732;--soft:#0d1533;--text:#e8ecf9;--muted:#a5b1d8;--line:#24315d;
-      --accent:#2ecc71;--accent-2:#44d983;--warn:#f59e0b;--err:#ef4444;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{margin:0;background:linear-gradient(180deg,#0b1020,#0a0f1f 60%);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial}
-    .app{display:grid;grid-template-columns:320px 1fr;grid-template-rows:auto 1fr;min-height:100vh}
-    header{grid-column:1/3;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:rgba(16,23,50,.85);backdrop-filter: blur(6px);position:sticky;top:0;z-index:10}
-    header .brand{display:flex;gap:10px;align-items:center}
-    .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
-    header h1{font-size:16px;margin:0;font-weight:600}
-    header .actions{display:flex;gap:8px}
-    .btn{border:1px solid var(--line);background:var(--panel);color:var(--text);padding:8px 10px;border-radius:10px;cursor:pointer}
-    .btn:hover{border-color:#31407d}
-    .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#0b1020;border:none}
-    .layout{display:grid;grid-template-columns:320px 1fr;min-height:calc(100vh - 54px)}
-    .left{border-right:1px solid var(--line);background:linear-gradient(180deg,#0c1230,#0c1030)}
-    .section{padding:12px;border-bottom:1px dashed var(--line)}
-    .section h2{font-size:13px;margin:0 0 8px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em}
-    .input, select, textarea{width:100%;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#0b1333;color:var(--text)}
-    .row{display:flex;gap:8px}
-    .row>*{flex:1}
-    .list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto}
-    .item{padding:8px;border:1px solid var(--line);border-radius:10px;background:#0b1333;display:flex;align-items:center;justify-content:space-between}
-    .item small{color:var(--muted)}
-    .inline{display:flex;gap:8px;align-items:center}
-    .right{position:relative;display:grid;grid-template-rows:1fr 260px}
-    .viewer{position:relative;border-bottom:1px solid var(--line);background:#0a122a}
-    #stage{position:absolute;inset:0;overflow:hidden;cursor:grab}
-    #stage.dragging{cursor:grabbing}
-    canvas#pageCanvas{position:absolute;left:0;top:0;image-rendering:crisp-edges}
-    .pin{position:absolute;width:18px;height:18px;border-radius:50%;border:2px solid #fff;background:var(--accent);box-shadow:0 0 0 2px rgba(0,0,0,.4);transform:translate(-50%,-100%);}
-    .pin::after{content:"";position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:2px;height:6px;background:#fff}
-    .toolbar{position:absolute;right:10px;top:10px;display:flex;gap:6px;z-index:5}
-    .badge{font-size:11px;color:#0b1020;background:var(--accent);border-radius:999px;padding:4px 8px;font-weight:700}
-    .status{position:absolute;left:10px;top:10px;display:flex;gap:8px;align-items:center}
-    .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left}
-    th{position:sticky;top:0;background:#0b1333}
-    tbody tr:hover{background:#0f1942}
-    .footerBar{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px;border-top:1px solid var(--line);background:#0b1333}
-    .note{font-size:12px;color:var(--muted)}
-    .pill{padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
-    .danger{background:linear-gradient(90deg,#ef4444,#f59e0b);color:white;border:none}
-    .hidden{display:none}
-  </style>
+  <title>Southwood — Signage Survey</title>
+  <link rel="stylesheet" href="./css/styles.css" />
 </head>
 <body>
-  <div class="app">
-    <header>
-      <div class="brand"><div class="dot"></div><h1>Southwood — Signage Schedule Generator</h1></div>
-      <div class="actions">
-        <button class="btn" id="btnSave">Save</button>
-        <label class="btn">
-          <input type="file" id="fileInput" accept="image/*,application/pdf" multiple hidden>
-          Upload Plan(s)
-        </label>
-        <button class="btn primary" id="btnOCR">Scan Text (OCR)</button>
-      </div>
-    </header>
-
-    <div class="layout">
-      <aside class="left">
-        <div class="section">
-          <h2>Projects</h2>
-          <div class="row">
-            <input class="input" id="projectName" placeholder="New project name" />
-            <button class="btn" id="btnNew">Add</button>
-          </div>
-          <div class="list" id="projectList"></div>
-        </div>
-        <div class="section">
-          <h2>Project Settings</h2>
-          <div class="row">
-            <input class="input" id="building" placeholder="Building (e.g., B1)" />
-            <input class="input" id="level" placeholder="Level (e.g., 1)" />
-          </div>
-          <div style="margin-top:8px" class="row">
-            <select id="rulePreset" class="input">
-              <option value="southwood">Southwood Default Rules</option>
-              <option value="basic">Basic (generic)</option>
-            </select>
-            <button class="btn" id="btnGenerate">Generate Schedule</button>
-          </div>
-          <details style="margin-top:8px">
-            <summary>Rules (read-only summary)</summary>
-            <ul style="margin:8px 0 0 16px;color:var(--muted)">
-              <li>Elevators: add Callbox + Evac + Hall Direct (room # defaults to 1-100 / C1-100; editable)</li>
-              <li>Stairs: Ingress (inside) + Egress (outside)</li>
-              <li>Exits: only on Level 1</li>
-              <li>Electrical/Data rooms → BOH</li>
-              <li>Restrooms: FOH label by room name/number</li>
-            </ul>
-          </details>
-        </div>
-        <div class="section">
-          <h2>Pages</h2>
-          <div id="pageList" class="list"></div>
-        </div>
-      </aside>
-
-      <main class="right">
-        <div class="viewer">
-          <div class="status">
-            <span class="badge" id="zoomBadge">100%</span>
-            <span class="pill" id="pageBadge">—</span>
-          </div>
-          <div class="toolbar">
-            <button class="btn" id="btnZoomOut">−</button>
-            <button class="btn" id="btnZoomIn">+</button>
-            <button class="btn" id="btnAddPin">Add Pin</button>
-            <button class="btn" id="btnClearPins">Clear Pins</button>
-          </div>
-          <div id="stage">
-            <canvas id="pageCanvas"></canvas>
-          </div>
-        </div>
-
-        <section>
-          <div class="footerBar">
-            <div class="inline">
-              <strong>Schedule</strong>
-              <span class="pill" id="rowCount">0 rows</span>
-            </div>
-            <div class="inline">
-              <button class="btn" id="btnAddRow">Add Row</button>
-              <button class="btn" id="btnExportCSV">Export CSV</button>
-              <button class="btn" id="btnExportXLSX">Export XLSX</button>
-              <button class="btn danger" id="btnClearSchedule">Clear</button>
-            </div>
-          </div>
-          <div style="max-height:230px; overflow:auto">
-            <table>
-              <thead>
-                <tr>
-                  <th>Sign Type</th>
-                  <th>Room Number</th>
-                  <th>Room Name</th>
-                  <th>Building</th>
-                  <th>Level</th>
-                  <th>Notes</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="scheduleBody"></tbody>
-            </table>
-          </div>
-          <div class="note" style="padding:6px 10px">
-            Tip: After OCR, click <em>Generate Schedule</em> to auto-draft rows using the rules. Everything is editable.
-          </div>
-        </section>
-      </main>
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span><h1>Southwood — Signage Survey</h1></div>
+    <div class="actions">
+      <button class="btn" id="btnSave">Save</button>
+      <label class="btn">
+        <input type="file" id="fileInput" accept="application/pdf,.pdf,image/*" multiple hidden>
+        Upload Plan(s)
+      </label>
+      <button class="btn" id="btnScanAll">Scan All Pages</button>
+      <button class="btn primary" id="btnGenerate">Generate Schedule</button>
     </div>
+  </header>
+
+  <div class="layout">
+    <aside class="left">
+      <section class="section">
+        <h2>Projects</h2>
+        <div class="row">
+          <input class="input" id="projectName" placeholder="New project name" />
+          <button class="btn" id="btnNew">Add</button>
+        </div>
+        <div id="projectList" class="list"></div>
+      </section>
+
+      <section class="section">
+        <h2>Settings</h2>
+        <div class="row">
+          <input class="input" id="building" placeholder="Building (e.g., B1)" />
+          <input class="input" id="level" placeholder="Level (e.g., 1)" />
+        </div>
+        <div class="row" style="margin-top:8px">
+          <select id="rulePreset" class="input">
+            <option value="southwood">Southwood Default Rules</option>
+            <option value="basic">Basic (generic)</option>
+          </select>
+          <button class="btn" id="btnExportXLSX">Export XLSX</button>
+        </div>
+        <details style="margin-top:8px"><summary>Rule summary</summary>
+          <ul class="hint">
+            <li>Elevators → Callbox + Evac + Hall Direct</li>
+            <li>Stairs → Ingress (inside) + Egress (outside)</li>
+            <li>Exits only on Level 1</li>
+            <li>Electrical/Data → BOH</li>
+            <li>Restrooms → FOH</li>
+          </ul>
+        </details>
+      </section>
+
+      <section class="section">
+        <h2>Pages</h2>
+        <div id="pageList" class="list"></div>
+      </section>
+
+      <section class="section">
+        <h2>Validation</h2>
+        <div id="issues" class="issues"></div>
+      </section>
+    </aside>
+
+    <main class="right">
+      <div class="viewer">
+        <div class="status">
+          <span class="badge" id="zoomBadge">100%</span>
+          <span class="pill" id="pageBadge">—</span>
+          <span class="pill" id="scaleBadge">Scale: not set</span>
+        </div>
+        <div class="toolbar">
+          <button class="btn" id="btnZoomOut">−</button>
+          <button class="btn" id="btnZoomIn">+</button>
+          <button class="btn" id="btnToggleGrid">Grid</button>
+          <button class="btn" id="btnScale">Set Scale</button>
+          <div class="divider"></div>
+          <div class="palette" id="pinPalette"></div>
+          <button class="btn" id="btnClearPins">Clear Pins (page)</button>
+        </div>
+        <div id="stage">
+          <canvas id="pageCanvas"></canvas>
+        </div>
+      </div>
+
+      <section class="schedule">
+        <div class="footerBar">
+          <div class="inline"><strong>Schedule</strong> <span class="pill" id="rowCount">0 rows</span></div>
+          <div class="inline">
+            <button class="btn" id="btnAddRow">Add Row</button>
+            <button class="btn" id="btnExportCSV">Export CSV</button>
+            <button class="btn danger" id="btnClearSchedule">Clear</button>
+          </div>
+        </div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr>
+              <th>Sign Type</th><th>Room Number</th><th>Room Name</th>
+              <th>Building</th><th>Level</th><th>Notes</th><th></th>
+            </tr></thead>
+            <tbody id="scheduleBody"></tbody>
+          </table>
+        </div>
+        <div class="note">Tip: Use the palette to drop presets fast. Double‑click a pin to edit. Press <kbd>S</kbd> for Stair bundle, <kbd>L</kbd> for Elevator bundle, <kbd>G</kbd> to toggle grid.</div>
+      </section>
+    </main>
   </div>
 
-  <!-- Minimal deps (CDN). These work on GitHub Pages. If you ever want fully offline, we can vendor them locally. -->
+  <!-- Libraries via CDN (GitHub Pages friendly). We can vendor these later for fully-offline use. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.js"></script>
-  <script>
-    // Point pdf.js at its worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.js";
-  </script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.js";</script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-  <script>
-  // ---------------------------
-  // Simple Store
-  // ---------------------------
-  const storeKey = 'sw-signage-projects-v1';
-  const $ = (sel, root=document) => root.querySelector(sel);
-  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
-  const byId = id => document.getElementById(id);
-
-  let projects = load();
-  let currentId = projects[0]?.id || null;
-  let ocrIndex = {}; // pageId -> OCR text
-
-  function load(){
-    try{ return JSON.parse(localStorage.getItem(storeKey)) || []; }catch{ return []; }
-  }
-  function save(){ localStorage.setItem(storeKey, JSON.stringify(projects)); renderProjects(); }
-
-  function uuid(){ return 'p-' + Math.random().toString(36).slice(2,9); }
-
-  function createProject(name){
-    const id = uuid();
-    projects.push({id,name:name||'Untitled', building:'', level:'', pages:[], pins:[], schedule:[]});
-    currentId = id; save(); renderAll();
-  }
-  function getProject(){ return projects.find(p=>p.id===currentId) }
-  function updateProject(part){ Object.assign(getProject(), part); save(); }
-
-  // ---------------------------
-  // UI Render — Projects & Pages
-  // ---------------------------
-  function renderProjects(){
-    const list = byId('projectList'); list.innerHTML = '';
-    projects.forEach(p=>{
-      const div = document.createElement('div'); div.className='item';
-      const left = document.createElement('div'); left.className='inline';
-      const name = document.createElement('input'); name.className='input'; name.value=p.name; name.style.width='170px';
-      name.onchange=()=>{p.name=name.value; save()};
-      const small = document.createElement('small'); small.textContent = `${p.pages.length} page(s)`;
-      left.append(name, small);
-      const right = document.createElement('div'); right.className='inline';
-      const open = document.createElement('button'); open.className='btn'; open.textContent='Open'; open.onclick=()=>{currentId=p.id; renderAll()}
-      const del = document.createElement('button'); del.className='btn danger'; del.textContent='Delete'; del.onclick=()=>{ if(confirm('Delete project?')){ projects = projects.filter(x=>x.id!==p.id); if(currentId===p.id) currentId=projects[0]?.id||null; save(); renderAll(); } };
-      right.append(open, del);
-      div.append(left, right); list.append(div);
-    })
-  }
-
-  function renderPages(){
-    const list = byId('pageList'); list.innerHTML='';
-    const p = getProject(); if(!p){ list.innerHTML='<div class="note">No project selected.</div>'; return }
-    p.pages.forEach((page, idx)=>{
-      const row = document.createElement('div'); row.className='item';
-      const left = document.createElement('div'); left.textContent = page.name || `Page ${idx+1}`;
-      const right = document.createElement('div');
-      const btn = document.createElement('button'); btn.className='btn'; btn.textContent='View'; btn.onclick=()=>openPage(idx);
-      right.append(btn); row.append(left,right); list.append(row);
-    })
-  }
-
-  // ---------------------------
-  // File Handling (images + PDFs)
-  // ---------------------------
-  const fileInput = byId('fileInput');
-  fileInput.addEventListener('change', async (e)=>{
-    const files = Array.from(e.target.files||[]);
-    const p = getProject(); if(!p) return;
-
-    for(const f of files){
-      if(f.type==='application/pdf'){
-        const arrayBuf = await f.arrayBuffer();
-        const pdfUrl = URL.createObjectURL(new Blob([arrayBuf],{type:'application/pdf'}));
-        const pdf = await pdfjsLib.getDocument({url: pdfUrl}).promise;
-        for(let i=1;i<=pdf.numPages;i++){
-          const page = await pdf.getPage(i);
-          const viewport = page.getViewport({scale: 1});
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          canvas.width = viewport.width; canvas.height = viewport.height;
-          await page.render({canvasContext: ctx, viewport}).promise;
-          const dataUrl = canvas.toDataURL('image/png');
-          p.pages.push({type:'image', name:`${f.name} — p${i}`, dataUrl, w: canvas.width, h: canvas.height});
-        }
-      } else if(f.type.startsWith('image/')){
-        const dataUrl = await blobToDataURL(f);
-        const dims = await imageDims(dataUrl);
-        p.pages.push({type:'image', name:f.name, dataUrl, w:dims.w, h:dims.h});
-      }
-    }
-    save(); renderPages(); if(getProject().pages.length) openPage(0);
-  });
-
-  function blobToDataURL(file){
-    return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(file); })
-  }
-  function imageDims(src){ return new Promise(res=>{ const img=new Image(); img.onload=()=>res({w:img.naturalWidth,h:img.naturalHeight}); img.src=src; }) }
-
-  // ---------------------------
-  // Viewer (pan/zoom + pins)
-  // ---------------------------
-  const stage = byId('stage');
-  const canvas = byId('pageCanvas');
-  const ctx = canvas.getContext('2d');
-  let pageIndex = 0;
-  let zoom = 1, originX=0, originY=0, isDragging=false, lastX=0, lastY=0;
-  let addingPin = false;
-
-  function openPage(i){
-    pageIndex = i; byId('pageBadge').textContent = `Page ${i+1} / ${getProject().pages.length}`;
-    zoom = fitToScreen(); originX=originY=0; draw(); renderPins();
-  }
-
-  function fitToScreen(){
-    const p = getProject(); if(!p||!p.pages[pageIndex]) return 1;
-    const page = p.pages[pageIndex];
-    const stageRect = stage.getBoundingClientRect();
-    const scaleX = stageRect.width / page.w;
-    const scaleY = stageRect.height / page.h;
-    const z = Math.min(scaleX, scaleY) * 0.98; // fit with small margin
-    updateZoomBadge(z);
-    return z;
-  }
-
-  function updateZoomBadge(z){ byId('zoomBadge').textContent = Math.round(z*100)+"%" }
-
-  function toScreen(x,y){ return { x: (x*zoom)+originX, y:(y*zoom)+originY } }
-  function toWorld(x,y){ return { x: (x-originX)/zoom, y:(y-originY)/zoom } }
-
-  function draw(){
-    const p = getProject(); if(!p) return; const page = p.pages[pageIndex]; if(!page) return;
-    const rect = stage.getBoundingClientRect();
-    canvas.width = rect.width; canvas.height = rect.height;
-    const img = new Image(); img.onload = ()=>{
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      const s = toScreen(0,0); // top-left
-      const w = page.w*zoom, h=page.h*zoom;
-      ctx.drawImage(img, s.x, s.y, w, h);
-    }; img.src = page.dataUrl;
-  }
-
-  stage.addEventListener('mousedown', (e)=>{ isDragging=true; lastX=e.clientX; lastY=e.clientY; stage.classList.add('dragging') });
-  window.addEventListener('mouseup', ()=>{ isDragging=false; stage.classList.remove('dragging') });
-  window.addEventListener('mousemove', (e)=>{
-    if(addingPin) return;
-    if(isDragging){ originX += (e.clientX-lastX); originY += (e.clientY-lastY); lastX=e.clientX; lastY=e.clientY; draw(); renderPins(); }
-  });
-
-  stage.addEventListener('click', (e)=>{
-    if(!addingPin) return;
-    const p = getProject(); if(!p) return;
-    const rect = stage.getBoundingClientRect();
-    const world = toWorld(e.clientX-rect.left, e.clientY-rect.top);
-    p.pins.push({page:pageIndex, x:world.x, y:world.y, note:''});
-    addingPin=false; byId('btnAddPin').classList.remove('primary'); save(); renderPins();
-  });
-
-  function renderPins(){
-    // remove existing
-    $$('.pin', stage).forEach(el=>el.remove());
-    const p = getProject(); if(!p) return;
-    p.pins.filter(pin=>pin.page===pageIndex).forEach((pin, idx)=>{
-      const pos = toScreen(pin.x, pin.y);
-      const el = document.createElement('div'); el.className='pin'; el.style.left=pos.x+'px'; el.style.top=pos.y+'px'; el.title = pin.note||`Pin ${idx+1}`;
-      // drag logic
-      let dragging=false, ox=0, oy=0;
-      el.addEventListener('mousedown', (e)=>{ e.stopPropagation(); dragging=true; ox=e.clientX; oy=e.clientY; })
-      window.addEventListener('mouseup', ()=>dragging=false);
-      window.addEventListener('mousemove', (e)=>{
-        if(!dragging) return; e.preventDefault();
-        const dx=(e.clientX-ox)/zoom, dy=(e.clientY-oy)/zoom; ox=e.clientX; oy=e.clientY; pin.x+=dx; pin.y+=dy; save(); draw(); renderPins();
-      });
-      el.addEventListener('dblclick',()=>{
-        const val = prompt('Pin note', pin.note||''); if(val!==null){ pin.note = val; save(); renderPins(); }
-      })
-      stage.appendChild(el);
-    })
-  }
-
-  // Zoom controls
-  byId('btnZoomIn').onclick = ()=>{ zoom*=1.1; updateZoomBadge(zoom); draw(); renderPins(); };
-  byId('btnZoomOut').onclick = ()=>{ zoom/=1.1; updateZoomBadge(zoom); draw(); renderPins(); };
-
-  byId('btnAddPin').onclick = ()=>{ addingPin=!addingPin; byId('btnAddPin').classList.toggle('primary', addingPin); };
-  byId('btnClearPins').onclick = ()=>{ const p=getProject(); if(!p) return; if(confirm('Clear pins on this page?')){ p.pins = p.pins.filter(x=>x.page!==pageIndex); save(); renderPins(); } };
-
-  // ---------------------------
-  // OCR
-  // ---------------------------
-  byId('btnOCR').onclick = async ()=>{
-    const p=getProject(); if(!p||!p.pages[pageIndex]) return alert('No page');
-    const page=p.pages[pageIndex];
-    setBusy(true,'Running OCR…');
-    try{
-      const res = await Tesseract.recognize(page.dataUrl, 'eng', { logger:m=>{ /* can show progress */ } });
-      ocrIndex[pageKey()] = res.data.text;
-      alert('OCR complete for current page. Now click "Generate Schedule".');
-    }catch(err){ console.error(err); alert('OCR error. Try a clearer page or zoom in and screenshot.'); }
-    setBusy(false);
-  }
-
-  function pageKey(){ return (getProject()?.id||'')+':'+pageIndex }
-
-  // ---------------------------
-  // Rules Engine — from OCR → schedule rows
-  // ---------------------------
-  const KEYWORDS = [
-    {k:/ELEV(?:ATOR|\.|\b)/i, type:'ELEVATOR'},
-    {k:/STAIR/i, type:'STAIR'},
-    {k:/WOMEN|LADIES|WOMEN\'S|WOMAN|GIRLS|W\.?C\.?/i, type:'WOMENS_RR'},
-    {k:/MEN|MEN\'S|BOYS|MENS|M\.?C\.?/i, type:'MENS_RR'},
-    {k:/TOILET|RESTROOM|BATH/i, type:'RESTROOM'},
-    {k:/ELECTRICAL/i, type:'ELECTRICAL'},
-    {k:/DATA|IT CLOSET|IDF|MDF/i, type:'DATA'},
-    {k:/EXIT/i, type:'EXIT'},
-    {k:/LOBBY/i, type:'LOBBY'},
-    {k:/MECHANICAL|JANITOR|JANITORIAL|CUSTODIAN|CUSTODIAL/i, type:'BOH_MISC'},
-  ];
-
-  function deriveRoomNumber(text){
-    // naive: pick the first 1-4 digit pattern that looks like a room #
-    const m = text.match(/\b[AC]?(\d{1,4})(?:[-\. ]?\d{1,3})?\b/);
-    return m ? m[0] : '';
-  }
-
-  function generateScheduleFromOCR(){
-    const p=getProject(); if(!p){ alert('No project selected.'); return; }
-    if(!p.pages.length){ alert('No pages uploaded yet. Click "Upload Plan(s)".'); return; }
-    const text = ocrIndex[pageKey()]||'';
-    if(!text.trim()){
-      alert('No OCR text found for this page. Click "Scan Text (OCR)" first, then try Generate.');
-      return;
-    }
-    const startCount = p.schedule.length;
-    const rows=[];
-
-    function pushRow(SignType, RoomNumber, RoomName, Notes=''){
-      rows.push({SignType, RoomNumber, RoomName, Building:p.building||'', Level:p.level||'', Notes});
-    }
-
-    const preset = byId('rulePreset').value;
-    const L1only = (p.level||'').toString().trim()==='1';
-
-    // scan keywords
-    for(const kw of KEYWORDS){
-      if(!kw.k.test(text)) continue;
-      switch(kw.type){
-        case 'ELEVATOR':
-          if(preset==='southwood'){
-            pushRow('CALLBOX','1-100','ELEV. LOBBY','Auto from OCR');
-            pushRow('EVAC','1-100','ELEV. LOBBY','Auto from OCR');
-            pushRow('HALL DIRECT','C1-100','ELEV. LOBBY','Door into elevator lobby');
-          } else {
-            pushRow('ELEVATOR LOBBY','','ELEVATOR LOBBY','Auto from OCR');
-          }
-          break;
-        case 'STAIR':
-          pushRow('INGRESS', deriveRoomNumber(text)||'', 'STAIR','Inside stair');
-          pushRow('EGRESS', deriveRoomNumber(text)||'', 'STAIR','Outside stair');
-          break;
-        case 'WOMENS_RR':
-          pushRow('FOH', deriveRoomNumber(text)||'', 'WOMEN\'S RESTROOM','Auto from OCR');
-          break;
-        case 'MENS_RR':
-          pushRow('FOH', deriveRoomNumber(text)||'', 'MEN\'S RESTROOM','Auto from OCR');
-          break;
-        case 'RESTROOM':
-          pushRow('FOH', deriveRoomNumber(text)||'', 'RESTROOM','Auto from OCR');
-          break;
-        case 'ELECTRICAL':
-          pushRow('BOH', deriveRoomNumber(text)||'', 'ELECTRICAL','Auto from OCR');
-          break;
-        case 'DATA':
-          pushRow('BOH', deriveRoomNumber(text)||'', 'DATA','Auto from OCR');
-          break;
-        case 'EXIT':
-          if(L1only) pushRow('EXIT','','EXIT','Only placed on Level 1');
-          break;
-        case 'LOBBY':
-          // informational — often alongside elevator handling above
-          break;
-        case 'BOH_MISC':
-          pushRow('BOH', deriveRoomNumber(text)||'', 'MECH/JANITORIAL','Auto from OCR');
-          break;
-      }
-    }
-
-    // merge into schedule (dedupe by all fields)
-    const key = r=>[r.SignType,r.RoomNumber,r.RoomName,r.Building,r.Level].join('|');
-    const map = new Map();
-    [...p.schedule, ...rows].forEach(r=>{ map.set(key(r), r) });
-    p.schedule = [...map.values()];
-    save(); renderSchedule();
-
-    const added = p.schedule.length - startCount;
-    if(added<=0){
-      alert('No keyword matches found on this page. Try running OCR again or zooming into a room and uploading a clearer page. You can still add rows manually.');
-    } else {
-      alert(`Added ${added} row(s) from OCR.`);
-    }
-  }
-
-  byId('btnGenerate').onclick = ()=>{
-    generateScheduleFromOCR();
-  }
-
-  // ---------------------------
-  // Schedule table
-  // ---------------------------
-  function renderSchedule(){
-    const p=getProject(); if(!p) return; const body = byId('scheduleBody'); body.innerHTML='';
-    p.schedule.forEach((row, idx)=>{
-      const tr = document.createElement('tr');
-      const fields = ['SignType','RoomNumber','RoomName','Building','Level','Notes'];
-      fields.forEach(f=>{
-        const td = document.createElement('td');
-        const input = document.createElement('input'); input.className='input'; input.value=row[f]||''; input.onchange=()=>{ row[f]=input.value; save(); };
-        td.append(input); tr.append(td);
-      })
-      const tdDel = document.createElement('td'); const btn = document.createElement('button'); btn.className='btn danger'; btn.textContent='✕'; btn.onclick=()=>{ getProject().schedule.splice(idx,1); save(); renderSchedule(); };
-      tdDel.append(btn); tr.append(tdDel);
-      body.append(tr);
-    })
-    byId('rowCount').textContent = `${p.schedule.length} rows`;
-  }
-
-  byId('btnAddRow').onclick = ()=>{ const p=getProject(); if(!p) return; p.schedule.push({SignType:'',RoomNumber:'',RoomName:'',Building:p.building||'',Level:p.level||'',Notes:''}); save(); renderSchedule(); }
-  byId('btnClearSchedule').onclick = ()=>{ const p=getProject(); if(!p) return; if(confirm('Clear entire schedule?')){ p.schedule=[]; save(); renderSchedule(); } }
-
-  // Export
-  byId('btnExportCSV').onclick = ()=>{ exportCSV() };
-  byId('btnExportXLSX').onclick = ()=>{ exportXLSX() };
-
-  function exportCSV(){
-    const p=getProject(); if(!p) return;
-    const headers = ['Sign Type','Room Number','Room Name','Building','Level','Notes'];
-    const rows = p.schedule.map(r=>[r.SignType,r.RoomNumber,r.RoomName,r.Building,r.Level,r.Notes]);
-    const csv = [headers, ...rows].map(a=>a.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
-    download(`${p.name||'schedule'}.csv`, 'text/csv', csv);
-  }
-
-  function exportXLSX(){
-    const p=getProject(); if(!p) return;
-    const ws_data = [ ['Sign Type','Room Number','Room Name','Building','Level','Notes'], ...p.schedule.map(r=>[r.SignType,r.RoomNumber,r.RoomName,r.Building,r.Level,r.Notes]) ];
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(ws_data);
-    XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
-    const out = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-    const blob = new Blob([out], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url; a.download=(getProject().name||'schedule')+'.xlsx'; a.click(); URL.revokeObjectURL(url);
-  }
-
-  function download(name, type, text){
-    const blob = new Blob([text], {type});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
-  }
-
-  // ---------------------------
-  // Save & settings
-  // ---------------------------
-  byId('btnSave').onclick = ()=>save();
-  byId('projectName').addEventListener('keydown', e=>{ if(e.key==='Enter'){ createProject(byId('projectName').value.trim()); byId('projectName').value=''; } })
-  byId('btnNew').onclick = ()=>{ createProject(byId('projectName').value.trim()); byId('projectName').value=''; };
-  byId('building').onchange = ()=> updateProject({building: byId('building').value});
-  byId('level').onchange = ()=> updateProject({level: byId('level').value});
-
-  function renderSettings(){
-    const p=getProject(); if(!p){ byId('building').value=''; byId('level').value=''; return }
-    byId('building').value = p.building||''; byId('level').value=p.level||'';
-  }
-
-  // ---------------------------
-  // Boot
-  // ---------------------------
-  function renderAll(){ renderProjects(); renderPages(); renderSettings(); draw(); renderPins(); renderSchedule(); }
-  renderAll();
-
-  function setBusy(on, text=''){ document.body.style.cursor = on?'progress':'default'; }
-
-  // if no project, create one
-  if(!getProject()) createProject('New Project');
-
-  </script>
+  <!-- App modules -->
+  <script type="module" src="./js/app.js"></script>
 </body>
 </html>

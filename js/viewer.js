@@ -20,7 +20,7 @@ export class Viewer{
     if(isPdf){
       try{
         const arrayBuf = await file.arrayBuffer();
-        // Raw data avoids blob URL/CORS issues on GitHub Pages
+        // Use raw data to avoid blob URL/CORS issues (works great on GitHub Pages)
         const pdf = await pdfjsLib.getDocument({data: arrayBuf}).promise;
         for(let i=1;i<=pdf.numPages;i++){
           const page = await pdf.getPage(i);
@@ -30,6 +30,7 @@ export class Viewer{
           canvas.width = viewport.width; canvas.height = viewport.height;
           await page.render({canvasContext: ctx, viewport}).promise;
           const dataUrl = canvas.toDataURL('image/png');
+          // Try to read any real text layer (preferred over OCR)
           const textContent = await page.getTextContent().catch(()=>({items:[]}));
           const txt = (textContent.items||[]).map(it=>it.str).join('\n');
           project.pages.push({type:'image', name:`${file.name} — p${i}`, dataUrl, w: canvas.width, h: canvas.height, _pdfText: txt});
@@ -105,3 +106,4 @@ export class Viewer{
 
   _blobToDataURL(file){ return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(file); }) }
   _imageDims(src){ return new Promise(res=>{ const img=new Image(); img.onload=()=>res({w:img.naturalWidth,h:img.naturalHeight}); img.src=src; }) }
+}

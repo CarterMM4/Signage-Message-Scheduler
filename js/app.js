@@ -7,7 +7,7 @@ import { Exporter } from './exporter.js';
 const $ = (s, r=document)=>r.querySelector(s);
 
 // --- App State --------------------------------------------------------------
-const store = new Store('sw-signage-projects-v2');
+const store = new Store('sw-signage-projects-v3');
 let projects = await store.load();
 let currentId = projects[0]?.id || null;
 let ocrIndex = {}; // pageKey -> text
@@ -36,15 +36,17 @@ $('#btnAddRow').onclick = ()=>{ const p=getProject(); if(!p) return; p.schedule.
 $('#btnClearSchedule').onclick = ()=>{ const p=getProject(); if(!p) return; if(confirm('Clear entire schedule?')){ p.schedule=[]; save(); renderSchedule(); }};
 $('#btnExportCSV').onclick = ()=> exporter.exportCSV(getProject());
 $('#btnExportXLSX').onclick = ()=> exporter.exportXLSX(getProject());
+$('#btnExportXLSX2').onclick = ()=> exporter.exportXLSX(getProject());
 $('#btnGenerate').onclick = ()=> generateSchedule();
 $('#btnScanAll').onclick = ()=> scanAllPages();
+$('#btnScanPage').onclick = ()=> runOCRForPage(viewer.pageIndex).then(()=>alert('OCR done for this page. Click Generate.'));
 
 // Palette presets
 const PRESETS = [
   {key:'1', label:'FOH', payload:{SignType:'FOH'}},
   {key:'2', label:'BOH', payload:{SignType:'BOH'}},
   {key:'S', label:'Stair Bundle', bundle:'STAIR'},
-  {key:'L', label:'Elevator Bundle', bundle:'ELEV'},
+  {key:'L', label:'Elevator Bundle', bundle:'ELEV'} ,
   {key:'X', label:'Exit', payload:{SignType:'EXIT'}},
 ];
 const pal = document.getElementById('pinPalette');
@@ -135,8 +137,10 @@ function handlePinDrop({world, preset}){
 async function runOCRForPage(i){
   const p = getProject(); if(!p) return;
   const page = p.pages[i]; if(!page) return;
+  // Prefer embedded PDF text (way more accurate)
   const textFromPdf = await viewer.extractPdfTextIfAvailable(page);
-  if(textFromPdf){ ocrIndex[(getProject().id+':'+i)] = textFromPdf; return 'pdf'; }
+  if(textFromPdf && textFromPdf.trim()){ ocrIndex[(getProject().id+':'+i)] = textFromPdf; return 'pdf'; }
+  // Fallback to OCR on the page image
   const txt = await ocr.recognize(page.dataUrl);
   ocrIndex[(getProject().id+':'+i)] = txt;
   return 'ocr';
@@ -152,7 +156,7 @@ function generateSchedule(){
   const p=getProject(); if(!p){ alert('No project selected.'); return; }
   if(!p.pages.length){ alert('No pages uploaded yet. Click "Upload Plan(s)".'); return; }
   const text = ocrIndex[pageKey()]||'';
-  if(!text.trim()){ alert('No OCR/text for this page. Click "Scan All Pages" or run OCR for this page.'); return; }
+  if(!text.trim()){ alert('No OCR/text for this page. Click "Scan This Page" or "Scan All Pages".'); return; }
   const added = rules.apply(text, p, document.getElementById('rulePreset').value);
   save(); renderSchedule(); validate();
   if(added<=0) alert('No keyword matches found. You can still add rows manually or drop bundles from the palette.');

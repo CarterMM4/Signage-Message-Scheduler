@@ -201,4 +201,88 @@ export class Viewer{
     s.addEventListener('click', (e)=>{
       if(!this.activePreset) return;
       const rect=s.getBoundingClientRect();
-      const world=this.toWorld(e.clientX-rect.left, e
+      const world=this.toWorld(e.clientX-rect.left, e.clientY-rect.top);
+      if(this.showGrid){ const grid=20; world.x=Math.round(world.x/grid)*grid; world.y=Math.round(world.y/grid)*grid; }
+      this.onPinDrop({world, preset:this.activePreset});
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drawing
+  // ---------------------------------------------------------------------------
+  _fit(){
+    const p=this.project;
+    if(!p || !p.pages[this.pageIndex]) return 1;
+    const page=p.pages[this.pageIndex];
+    const r=this.stage.getBoundingClientRect();
+    const zx=r.width/page.w, zy=r.height/page.h;
+    const z=Math.min(zx,zy)*0.98;
+    const zb=document.getElementById('zoomBadge');
+    if (zb) zb.textContent=Math.round(z*100)+'%';
+    return z;
+  }
+
+  _draw(){
+    const p=this.project; if(!p) return;
+    const page=p.pages[this.pageIndex]; if(!page) return;
+
+    const rect=this.stage.getBoundingClientRect();
+    this.canvas.width=rect.width; this.canvas.height=rect.height;
+
+    const img=new Image();
+    img.onload=()=>{
+      this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
+      const tl=this.toScreen(0,0);
+      const w=page.w*this.zoom, h=page.h*this.zoom;
+      this.ctx.drawImage(img, tl.x, tl.y, w, h);
+      if(this.showGrid) this._drawGrid();
+    };
+    img.src=page.dataUrl;
+  }
+
+  _drawGrid(){
+    const g=20*this.zoom, r=this.canvas, ctx=this.ctx;
+    ctx.save();
+    ctx.strokeStyle='rgba(255,255,255,0.07)'; ctx.lineWidth=1;
+    for(let x=((this.originX%g)+g)%g; x<r.width; x+=g){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,r.height); ctx.stroke(); }
+    for(let y=((this.originY%g)+g)%g; y<r.height; y+=g){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(r.width,y); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  _renderPins(){
+    this.stage.querySelectorAll('.pin').forEach(el=>el.remove());
+    const p=this.project; if(!p) return;
+    const pins=p.pins.filter(x=>x.page===this.pageIndex);
+
+    pins.forEach((pin, idx)=>{
+      const pos=this.toScreen(pin.x, pin.y);
+      const el=document.createElement('div');
+      el.className='pin'; el.style.left=pos.x+'px'; el.style.top=pos.y+'px';
+      el.title = pin.note || `${pin.preset||'Pin'} ${idx+1}`;
+
+      let dragging=false, ox=0, oy=0;
+      el.addEventListener('mousedown', (e)=>{ e.stopPropagation(); dragging=true; ox=e.clientX; oy=e.clientY; });
+      window.addEventListener('mouseup', ()=> dragging=false);
+      window.addEventListener('mousemove', (e)=>{
+        if(!dragging) return; e.preventDefault();
+        const dx=(e.clientX-ox)/this.zoom, dy=(e.clientY-oy)/this.zoom; ox=e.clientX; oy=e.clientY;
+        pin.x+=dx; pin.y+=dy; this._draw(); this._renderPins();
+      });
+      el.addEventListener('dblclick', ()=>{
+        const val=prompt('Pin note', pin.note||''); if(val!==null){ pin.note=val; }
+      });
+
+      this.stage.appendChild(el);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Utils
+  // ---------------------------------------------------------------------------
+  _blobToDataURL(file){
+    return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(file); });
+  }
+  _imageDims(src){
+    return new Promise(res=>{ const img=new Image(); img.onload=()=>res({w:img.naturalWidth,h:img.naturalHeight}); img.src=src; });
+  }
+}
